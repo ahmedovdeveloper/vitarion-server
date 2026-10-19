@@ -5,6 +5,8 @@ import dotenv from "dotenv";
 
 import SiteVisit from "./models/SiteVisit.js";
 import ProductView from "./models/ProductView.js";
+import ProductComment from "./models/ProductComment.js";
+import { sanitizeCommentPayload } from "./utils/commentValidation.js";
 
 dotenv.config();
 
@@ -121,6 +123,57 @@ app.post("/api/analytics/track", async (req, res) => {
       success: false,
       error: "Unable to save analytics event",
     });
+  }
+});
+
+app.get("/api/products/:slug/comments", async (req, res) => {
+  try {
+    const productSlug = String(req.params.slug || "").trim();
+
+    if (!productSlug) {
+      return res.status(400).json({ error: "Product slug is required." });
+    }
+
+    const comments = await ProductComment.find({ productSlug })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .lean();
+
+    return res.json({ comments });
+  } catch (error) {
+    console.error("product comments read error", error);
+    return res.status(500).json({ error: "Unable to load product comments." });
+  }
+});
+
+app.post("/api/products/:slug/comments", async (req, res) => {
+  try {
+    const productSlug = String(req.params.slug || "").trim();
+
+    if (!productSlug) {
+      return res.status(400).json({ error: "Product slug is required." });
+    }
+
+    const { name, comment, rating } = sanitizeCommentPayload(req.body || {});
+
+    if (!comment) {
+      return res.status(400).json({ error: "Comment text is required." });
+    }
+
+    const createdComment = await ProductComment.create({
+      productSlug,
+      name,
+      comment,
+      rating,
+    });
+
+    return res.status(201).json({
+      success: true,
+      comment: createdComment,
+    });
+  } catch (error) {
+    console.error("product comments create error", error);
+    return res.status(500).json({ error: "Unable to save product comment." });
   }
 });
 
